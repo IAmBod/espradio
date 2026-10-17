@@ -10,6 +10,7 @@ import "C"
 import (
 	"errors"
 	"runtime"
+	"sync/atomic"
 	"time"
 	"unsafe"
 )
@@ -69,8 +70,12 @@ func (t VHCITransport) Write(buf []byte) (int, error) {
 func BLEInit() error {
 	// Ensure radio hardware is powered up (clocks, power domain, modem reset).
 	// This is normally done by Enable() for WiFi, but BLE may be used standalone.
-	if err := initHardware(); err != nil {
-		return err
+	// Skip it when WiFi is already up: initHardware pulses the WiFi baseband,
+	// front-end and MAC resets, which kills a running WiFi connection.
+	if atomic.LoadUint32(&wifiEnabled) != wifiStateOn {
+		if err := initHardware(); err != nil {
+			return err
+		}
 	}
 
 	// Ensure arena allocator is initialized. The BT blob needs malloc for
